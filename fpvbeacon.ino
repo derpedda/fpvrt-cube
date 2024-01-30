@@ -30,19 +30,12 @@
 #include "BLEDevice.h"
 #include "BLEServer.h"
 #include "BLEUtils.h"
-#include "BLE2902.h"
-#include <Adafruit_NeoPixel.h>
 #include "esp_sleep.h"
-
-const uint8_t numLED = 12;
-#define PIXEL_DATAPIN 7
 
 #define GPIO_DEEP_SLEEP_DURATION     1  // sleep 4 seconds and then wake up
 RTC_DATA_ATTR static time_t last;        // remember last boot in RTC Memory
 RTC_DATA_ATTR static uint32_t bootcount; // remember number of boots in RTC Memory
 uint32_t chipID = 0x00;
-
-# define SERVICE_UUID_CONFIG "13c13a8c-10f9-4c66-ae7d-d57bb3a9b869"
 
 #ifdef __cplusplus
 extern "C" {
@@ -52,53 +45,11 @@ extern "C" {
 }
 #endif
 
+
 // See the following for generating UUIDs:
 // https://www.uuidgenerator.net/
-BLEServer *pServer;
 BLEAdvertising *pAdvertising;
-BLEService *bleConfigService;
 struct timeval now;
-
-bool deviceConnected = false;
-volatile uint8_t pixelcolor[3] = {0};
-
-BLEDescriptor bleConfigDescriptor(BLEUUID((uint16_t)0x2a05));
-BLECharacteristic *bleConfigCharacteristic;
-
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(numLED, PIXEL_DATAPIN, NEO_GRB + NEO_KHZ800);
-
-
-class ConfigBLEServerCallbacks: public BLEServerCallbacks {
-    void onConnect(BLEServer* pServer) {
-        deviceConnected = true;
-    };
-    void onDisconnect(BLEServer* pServer) {
-        deviceConnected = false;
-    };
-};
-
-class ConfigCharacteristicCallbackHandler : public BLECharacteristicCallbacks {
-    void onWrite(BLECharacteristic* pCharacteristic) {
-        uint8_t *data = pCharacteristic->getData();
-        
-        // We want this format: "CCRRGGBB" in hex (4 byte: command, red, green, blue)
-
-        if(data[0]=='C') {
-            pixelcolor[0] = data[1];
-            pixelcolor[1] = data[2];
-            pixelcolor[2] = data[3];
-        }
-        
-        Serial.printf("received command = %s\n",data);
-        
-    };
-
-    void onRead(BLECharacteristic* pCharacteristic) {
-        
-    };
-
-};
-
   
 void setBeacon() {
 
@@ -154,30 +105,10 @@ void setBeacon() {
 
 }
 
-
-void setConfigService() {
-    bleConfigService = pServer->createService(SERVICE_UUID_CONFIG);
-    bleConfigCharacteristic = new BLECharacteristic(SERVICE_UUID_CONFIG, BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ);
-    bleConfigCharacteristic->addDescriptor(&bleConfigDescriptor);
-    bleConfigCharacteristic->setCallbacks(new ConfigCharacteristicCallbackHandler());
-    bleConfigService->addCharacteristic(bleConfigCharacteristic);
-    pServer->setCallbacks(new ConfigBLEServerCallbacks());
-    bleConfigService->start();
-  }
-
-
-
 void setup() {
 
   Serial.begin(460800);
   delay(1000);
-
-  strip.begin();
-  Serial.println("Initialized Strip");
-  strip.setBrightness(255);
-  strip.setPixelColor(0, strip.Color(255,0,0));
-  strip.show();
-  Serial.println("Successfully finished strip setup");
 
   gettimeofday(&now, NULL);
 
@@ -191,26 +122,23 @@ void setup() {
   BLEDevice::init("FPVRaceTracker - Gö");
 
   // // Create the BLE Server
-  pServer = BLEDevice::createServer();
+  BLEServer *pServer = BLEDevice::createServer();
+
   pAdvertising = pServer->getAdvertising();
-
+  
   setBeacon();
-  setConfigService();
-
-
   //  Start advertising
   pAdvertising->start();
   Serial.println("Advertizing started...");
+  // delay(10000);
+  // Serial.printf("enter deep sleep\n");
+  // esp_deep_sleep(1000000LL * GPIO_DEEP_SLEEP_DURATION);
+  // Serial.printf("in deep sleep\n");
 }
 
 void loop() {
-    gettimeofday(&now, NULL);
-    Serial.printf("alive %lds\n", now.tv_sec-last);
-    for(int i=0;i<numLED;i++) {
-        strip.setPixelColor(i, strip.Color(pixelcolor[0],pixelcolor[1], pixelcolor[2]));
-    }
-    strip.show();
-    delay(1000);
-}
+  gettimeofday(&now, NULL);
+  Serial.printf("alive %lds\n", now.tv_sec-last);
+  delay(1000);
 
-// TODO: multi connections do not work, they just timeout...
+}
