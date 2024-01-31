@@ -61,6 +61,7 @@ struct timeval now;
 
 bool deviceConnected = false;
 volatile uint8_t pixelcolor[3] = {0};
+volatile bool changed = false;
 
 BLEDescriptor bleConfigDescriptor(BLEUUID((uint16_t)0x2a05));
 BLECharacteristic *bleConfigCharacteristic;
@@ -74,6 +75,7 @@ class ConfigBLEServerCallbacks: public BLEServerCallbacks {
     };
     void onDisconnect(BLEServer* pServer) {
         deviceConnected = false;
+        pServer->startAdvertising();
     };
 };
 
@@ -87,10 +89,10 @@ class ConfigCharacteristicCallbackHandler : public BLECharacteristicCallbacks {
             pixelcolor[0] = data[1];
             pixelcolor[1] = data[2];
             pixelcolor[2] = data[3];
+            changed = true;
         }
         
-        Serial.printf("received command = %s\n",data);
-        
+        Serial.printf("received command = %s, r %d, g %d, b %d\n",data, data[1], data[2], data[3]);
     };
 
     void onRead(BLECharacteristic* pCharacteristic) {
@@ -206,11 +208,12 @@ void setup() {
 void loop() {
     gettimeofday(&now, NULL);
     Serial.printf("alive %lds\n", now.tv_sec-last);
-    for(int i=0;i<numLED;i++) {
-        strip.setPixelColor(i, strip.Color(pixelcolor[0],pixelcolor[1], pixelcolor[2]));
+    if(changed) {
+        for(int i=0;i<numLED;i++) {
+            strip.setPixelColor(i, strip.Color(pixelcolor[0],pixelcolor[1], pixelcolor[2]));
+        }
+        strip.show();
+        changed = false;
     }
-    strip.show();
     delay(1000);
 }
-
-// TODO: multi connections do not work, they just timeout...
