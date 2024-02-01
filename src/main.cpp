@@ -34,8 +34,14 @@
 #include <Adafruit_NeoPixel.h>
 #include "esp_sleep.h"
 
-const uint8_t numLED = 12;
-#define PIXEL_DATAPIN 7
+
+#ifndef PIXEL_NR
+    #define PIXEL_NR 12
+#endif
+
+#ifndef PIXEL_DATAPIN
+    #define PIXEL_DATAPIN 7
+#endif
 
 #define GPIO_DEEP_SLEEP_DURATION     1  // sleep 4 seconds and then wake up
 RTC_DATA_ATTR static time_t last;        // remember last boot in RTC Memory
@@ -66,7 +72,7 @@ volatile bool changed = false;
 BLEDescriptor bleConfigDescriptor(BLEUUID((uint16_t)0x2a05));
 BLECharacteristic *bleConfigCharacteristic;
 
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(numLED, PIXEL_DATAPIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(PIXEL_NR, PIXEL_DATAPIN, NEO_GRB + NEO_KHZ800);
 
 
 class ConfigBLEServerCallbacks: public BLEServerCallbacks {
@@ -209,7 +215,7 @@ void loop() {
     gettimeofday(&now, NULL);
     Serial.printf("alive %lds\n", now.tv_sec-last);
     if(changed) {
-        for(int i=0;i<numLED;i++) {
+        for(int i=0;i<PIXEL_NR;i++) {
             strip.setPixelColor(i, strip.Color(pixelcolor[0],pixelcolor[1], pixelcolor[2]));
         }
         strip.show();
