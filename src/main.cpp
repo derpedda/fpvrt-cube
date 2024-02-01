@@ -33,9 +33,17 @@
 #include "BLE2902.h"
 #include <Adafruit_NeoPixel.h>
 #include "esp_sleep.h"
+#include "Preferences.h"
+using std::string;
 
-const uint8_t numLED = 12;
-#define PIXEL_DATAPIN 7
+
+#ifndef PIXEL_NR
+    #define PIXEL_NR 12
+#endif
+
+#ifndef PIXEL_DATAPIN
+    #define PIXEL_DATAPIN 7
+#endif
 
 #define GPIO_DEEP_SLEEP_DURATION     1  // sleep 4 seconds and then wake up
 RTC_DATA_ATTR static time_t last;        // remember last boot in RTC Memory
@@ -62,11 +70,14 @@ struct timeval now;
 bool deviceConnected = false;
 volatile uint8_t pixelcolor[3] = {0};
 volatile bool changed = false;
+volatile bool blink = false;
 
 BLEDescriptor bleConfigDescriptor(BLEUUID((uint16_t)0x2a05));
 BLECharacteristic *bleConfigCharacteristic;
 
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(numLED, PIXEL_DATAPIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(PIXEL_NR, PIXEL_DATAPIN, NEO_GRB + NEO_KHZ800);
+
+Preferences preferences;
 
 
 class ConfigBLEServerCallbacks: public BLEServerCallbacks {
@@ -82,17 +93,35 @@ class ConfigBLEServerCallbacks: public BLEServerCallbacks {
 class ConfigCharacteristicCallbackHandler : public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic* pCharacteristic) {
         uint8_t *data = pCharacteristic->getData();
+
+        size_t size = pCharacteristic->getLength();
         
         // We want this format: "CCRRGGBB" in hex (4 byte: command, red, green, blue)
 
-        if(data[0]=='C') {
+        String name;
+
+        switch (data[0]) {
+        case 'C':
             pixelcolor[0] = data[1];
             pixelcolor[1] = data[2];
             pixelcolor[2] = data[3];
             changed = true;
+            Serial.printf("received command = %s, r %d, g %d, b %d\n",data, data[1], data[2], data[3]);
+            break;
+        
+        case 'N':
+            name = String(data, size);
+            name = name.substring(1);
+            Serial.printf("received command = %c, val:%s\n", data[0], name);
+            preferences.putString("NAME", name);
+            blink = true;
+            break;
+
+        default:
+            break;
         }
         
-        Serial.printf("received command = %s, r %d, g %d, b %d\n",data, data[1], data[2], data[3]);
+        
     };
 
     void onRead(BLECharacteristic* pCharacteristic) {
@@ -181,6 +210,18 @@ void setup() {
   strip.show();
   Serial.println("Successfully finished strip setup");
 
+  preferences.begin("fpvrt-cube", false);
+
+//   // load config from preferences library
+//   uint8_t color_r = preferences.getUChar("color_r", 255);
+//   uint8_t color_g = preferences.getUChar("color_g", 255);
+//   uint8_t color_b = preferences.getUChar("color_b", 255);
+
+//   String dronename = preferences.getString("dronename", "UNNAMED");
+
+//   Serial.printf("Loaded settings: r:%d, g:%d, b:%d, name: %s\n");
+//   // end loadconfig
+
   gettimeofday(&now, NULL);
 
   Serial.printf("start ESP32 %d\n",bootcount++);
@@ -191,6 +232,7 @@ void setup() {
   
   // // Create the BLE Device
   BLEDevice::init("FPVRaceTracker - Gö");
+
 
   // // Create the BLE Server
   pServer = BLEDevice::createServer();
@@ -205,15 +247,35 @@ void setup() {
   Serial.println("Advertizing started...");
 }
 
+void setPixelToBackColors() {
+    for(int i=0;i<PIXEL_NR;i++) {
+        strip.setPixelColor(i, strip.Color(pixelcolor[0],pixelcolor[1], pixelcolor[2]));
+    }
+    strip.show();
+}
+
+void setPixelToColors(uint8_t r, uint8_t g, uint8_t b) {
+    for(int i=0;i<PIXEL_NR;i++) {
+        strip.setPixelColor(i, strip.Color(r,g, b));
+    }
+    strip.show();
+}
+
 void loop() {
     gettimeofday(&now, NULL);
     Serial.printf("alive %lds\n", now.tv_sec-last);
     if(changed) {
-        for(int i=0;i<numLED;i++) {
-            strip.setPixelColor(i, strip.Color(pixelcolor[0],pixelcolor[1], pixelcolor[2]));
-        }
-        strip.show();
+        setPixelToBackColors();
         changed = false;
+    }
+    if(blink) {
+        for(uint8_t i=0;i<=2;i++) {
+            setPixelToColors(0,0,0);
+            delay(200);
+            setPixelToBackColors();
+            delay(200);
+        }
+        blink = false;
     }
     delay(1000);
 }
